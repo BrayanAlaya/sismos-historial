@@ -1,0 +1,4 @@
+project_id = "rhsdwxujrixouvywhpha"
+
+[functions.check-nearby-quakes]
+verify_jwt = false

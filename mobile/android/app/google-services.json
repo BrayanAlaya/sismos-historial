@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "699870278256",
+    "project_id": "sismos-f72e9",
+    "storage_bucket": "sismos-f72e9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:699870278256:android:b0fc9cad34fe13ab8ffab5",
+        "android_client_info": {
+          "package_name": "com.company.sismos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBQAWmQoSYMjyxK4dRTUrqCTKlUIzOoEec"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
