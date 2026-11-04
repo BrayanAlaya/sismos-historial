@@ -1,5 +1,5 @@
 -- El programador de Supabase no admite segundos. Se lanza cada minuto
--- y la función revisa USGS cada 6 segundos durante ese minuto.
+-- y esa ejecución revisa USGS una sola vez y envía las notificaciones nuevas.
 -- Si ya existía el trabajo anterior:
 --   select cron.unschedule('check-nearby-quakes');
 

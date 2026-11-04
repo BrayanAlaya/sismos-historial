@@ -88,6 +88,10 @@ Deno.serve(async (request) => {
   });
   if (error) return json({ error: "No se pudo guardar la prueba." }, 500);
 
+  if (parsed.value.time <= Date.now()) {
+    await notifyNearbyOnce(supabaseUrl, serviceKey);
+  }
+
   return json({
     quake: {
       id,
@@ -103,4 +107,20 @@ Deno.serve(async (request) => {
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: corsHeaders });
+}
+
+async function notifyNearbyOnce(supabaseUrl: string, serviceKey: string) {
+  try {
+    await fetch(`${supabaseUrl}/functions/v1/check-nearby-quakes`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serviceKey}`,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch {
+    // La revisión de cada minuto vuelve a intentar el envío.
+  }
 }

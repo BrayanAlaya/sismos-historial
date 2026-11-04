@@ -10,18 +10,10 @@ import {
 
 const usgsFeedUrl =
   "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson";
-const checkIntervalMs = 6_000;
-const runBudgetMs = 54_000;
 
 Deno.serve(async () => {
-  const started = Date.now();
-  const passes = [];
-  while (true) {
-    passes.push(await checkOnce());
-    if (Date.now() - started + checkIntervalMs >= runBudgetMs) break;
-    await new Promise((resolve) => setTimeout(resolve, checkIntervalMs));
-  }
-  return Response.json({ intervalSeconds: 6, passes });
+  const pass = await checkOnce();
+  return Response.json({ passes: [pass] });
 });
 
 async function checkOnce() {

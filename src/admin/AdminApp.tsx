@@ -70,12 +70,14 @@ export default function AdminApp() {
               .finally(() => setLoggingIn(false))
           }}
         >
-          <p className="hud-kicker">Cuenta de prueba</p>
-          <h1>Publicar un sismo</h1>
-          <p className="admin-lead">
-            Entra para incrustar un sismo de prueba en la respuesta de USGS. El mapa,
-            el historial y la aplicación móvil lo tratan como un registro real.
-          </p>
+          <div className="admin-intro">
+            <p className="hud-kicker">Cuenta de prueba</p>
+            <h1>Publicar un sismo</h1>
+            <p className="admin-lead">
+              Entra para incrustar un sismo de prueba en la respuesta de USGS. El mapa,
+              el historial y la aplicación móvil lo tratan como un registro real.
+            </p>
+          </div>
           <label>
             Usuario
             <input
