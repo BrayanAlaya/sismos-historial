@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import '../utils/earthquake_format.dart';
 
-Future<void> showSafetyTips(BuildContext context) {
+Future<void> showSafetyTips(BuildContext context, {double? magnitude}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -11,12 +12,14 @@ Future<void> showSafetyTips(BuildContext context) {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (context) => const SafetyTipsSheet(),
+    builder: (context) => SafetyTipsSheet(magnitude: magnitude),
   );
 }
 
 class SafetyTipsSheet extends StatelessWidget {
-  const SafetyTipsSheet({super.key});
+  const SafetyTipsSheet({super.key, this.magnitude});
+
+  final double? magnitude;
 
   @override
   Widget build(BuildContext context) {
@@ -59,6 +62,24 @@ class SafetyTipsSheet extends StatelessWidget {
               style: TextStyle(color: kMuted),
             ),
             const SizedBox(height: 16),
+            if (magnitude != null) ...[
+              Text(
+                'PRIORIDAD · ${dangerLevelFor(magnitude!).label.toUpperCase()}',
+                style: const TextStyle(
+                  color: kKicker,
+                  fontSize: 13,
+                  letterSpacing: 1.1,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final step in priorityRecommendations(magnitude!))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(step),
+                ),
+              const SizedBox(height: 8),
+            ],
             for (final section in safetySections) ...[
               Text(
                 section.title,

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sismos/config/supabase_settings.dart';
 import 'package:sismos/models/earthquake.dart';
+import 'package:sismos/services/quake_alerts.dart';
+import 'package:sismos/services/test_quake.dart';
 import 'package:sismos/services/usgs_api.dart';
 import 'package:sismos/utils/earthquake_format.dart';
 
@@ -46,6 +48,17 @@ void main() {
       }),
       isNull,
     );
+  });
+
+  test('Peru bounds, sound and priority advice match the web rules', () {
+    expect(isInPeru(-7.157, -78.517), isTrue);
+    expect(isInPeru(-12.046, -77.043), isTrue);
+    expect(isInPeru(-33.45, -70.67), isFalse);
+    expect(shouldSoundForMagnitude(3.9), isFalse);
+    expect(shouldSoundForMagnitude(4), isTrue);
+    expect(priorityRecommendations(2.5).first, contains('Mantén la calma'));
+    expect(priorityRecommendations(4.8).first, contains('Agáchate'));
+    expect(priorityRecommendations(6.4).join(' '), contains('tsunami'));
   });
 
   test('danger levels follow the same cuts as the web app', () {
@@ -98,6 +111,127 @@ void main() {
     expect(
       uri.queryParameters['starttime'],
       DateTime.utc(2026, 8, 23).toIso8601String(),
+    );
+  });
+
+  test('una prueba reciente entra al mapa y conserva su puesto en el historial', () {
+    final now = DateTime.utc(2026, 11, 3, 18);
+    final recent = SimulatedQuake(
+      id: 'sim-reciente',
+      magnitude: 4.8,
+      place: 'Prueba sísmica',
+      time: now.millisecondsSinceEpoch - 60000,
+      latitude: -7.1569,
+      longitude: -78.5176,
+      depth: 30,
+    );
+    final stored = simulatedQuakeFromJson({
+      'id': recent.id,
+      'magnitude': recent.magnitude,
+      'place': recent.place,
+      'time': recent.time,
+      'latitude': recent.latitude,
+      'longitude': recent.longitude,
+      'depth': recent.depth,
+    });
+    expect(stored?.id, recent.id);
+    expect(simulatedQuakeFromJson({'id': 'rota'}), isNull);
+
+    final quakes = mergeFeedQuakes(
+      [
+        Earthquake(
+          id: 'us1',
+          magnitude: 3.1,
+          place: 'Chile',
+          title: 'M 3.1',
+          time: now.millisecondsSinceEpoch - 120000,
+          updated: now.millisecondsSinceEpoch,
+          url: '',
+          felt: null,
+          cdi: null,
+          mmi: null,
+          alert: null,
+          status: 'automatic',
+          tsunami: 0,
+          significance: 100,
+          magType: 'ml',
+          type: 'earthquake',
+          longitude: -70,
+          latitude: -33,
+          depth: 20,
+        ),
+      ],
+      [
+        recent,
+        SimulatedQuake(
+          id: 'sim-futura',
+          magnitude: 4.8,
+          place: 'Prueba sísmica',
+          time: now.millisecondsSinceEpoch + 60000,
+          latitude: -7.1,
+          longitude: -78.5,
+          depth: 10,
+        ),
+      ],
+      now: now,
+    );
+
+    expect(quakes.first.id, recent.id);
+    expect(quakes.first.place, 'Prueba sísmica');
+    expect(quakes.first.magnitude, 4.8);
+    expect(quakes.first.latitude, -7.1569);
+    expect(quakes.first.longitude, -78.5176);
+    expect(quakes.first.depth, 30);
+    expect(isRecent(quakes.first, now: now), isTrue);
+    expect(quakes, hasLength(2));
+    expect(mergeFeedQuakes(quakes, const [], now: now), quakes);
+
+    final newer = Earthquake(
+      id: 'us-nuevo',
+      magnitude: 5,
+      place: 'Perú',
+      title: 'M 5.0',
+      time: recent.time + 5000,
+      updated: recent.time,
+      url: '',
+      felt: null,
+      cdi: null,
+      mmi: null,
+      alert: null,
+      status: 'automatic',
+      tsunami: 0,
+      significance: 300,
+      magType: 'ml',
+      type: 'earthquake',
+      longitude: -77,
+      latitude: -12,
+      depth: 15,
+    );
+    final page = assembleHistoryPage(
+      usgs: [newer],
+      simulated: [earthquakeFromSimulation(recent)!],
+      indexes: {recent.id: simulationIndex(recent, [recent], 1)},
+      page: 1,
+      pageSize: 2,
+    );
+    expect(page.map((item) => item.id), ['us-nuevo', recent.id]);
+  });
+
+  test('la alerta cercana describe el sismo y pide las recomendaciones', () {
+    final now = DateTime.utc(2026, 10, 20, 18);
+    final alert = QuakeAlert(
+      id: 1,
+      magnitude: 4.8,
+      place: 'Cajamarca, Cajamarca, Peru',
+      distanceKm: 0,
+      quakeTime: now.subtract(const Duration(seconds: 20)),
+    );
+
+    expect(
+      describeQuakeAlert(alert, now: now),
+      'Se registró un sismo moderado de M 4.8 a 0 m de tu última ubicación, '
+      'en Cajamarca, Cajamarca, Peru. Ocurrió hace unos segundos. '
+      'Al aceptar verás qué hacer antes, durante y después de un sismo.',
     );
   });
 

@@ -78,6 +78,39 @@ String formatThousands(int value) {
   return buffer.toString();
 }
 
+/// Recuadro geográfico de referencia de Perú, de Tumbes a Tacna y de la costa al oriente.
+bool isInPeru(double latitude, double longitude) {
+  return latitude >= -18.35 &&
+      latitude <= -0.04 &&
+      longitude >= -81.33 &&
+      longitude <= -68.65;
+}
+
+/// A partir de Moderado el mapa emite un tono, si el usuario no lo silenció.
+bool shouldSoundForMagnitude(double magnitude) => magnitude >= 4;
+
+List<String> priorityRecommendations(double magnitude) {
+  if (magnitude >= 6) {
+    return const [
+      'Agáchate, cúbrete y sujétate, lejos de ventanas y de lo que pueda caer.',
+      'Cuando el movimiento pare, si el edificio está dañado evacúa por las escaleras.',
+      'En la costa, si hay aviso de tsunami, aléjate del mar hacia una zona alta.',
+    ];
+  }
+  if (magnitude >= 4) {
+    return const [
+      'Agáchate, cúbrete y sujétate bajo un mueble firme.',
+      'Aléjate de ventanas, espejos y estanterías.',
+      'No uses escaleras ni el ascensor mientras se mueve el suelo.',
+    ];
+  }
+  return const [
+    'Mantén la calma y comprueba si el movimiento se hace más fuerte.',
+    'Aléjate de objetos que puedan caer.',
+    'Ten presentes los pasos de antes, durante y después.',
+  ];
+}
+
 bool isRecent(Earthquake earthquake, {DateTime? now, int minutes = 30}) {
   final clock = now ?? DateTime.now();
   return clock.millisecondsSinceEpoch - earthquake.time < minutes * 60000;

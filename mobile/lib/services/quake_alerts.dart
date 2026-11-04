@@ -1,24 +1,30 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../utils/earthquake_format.dart';
+
 class QuakeAlert {
   const QuakeAlert({
     required this.id,
     required this.magnitude,
     required this.place,
     required this.distanceKm,
+    this.quakeTime,
   });
 
   final int id;
   final double magnitude;
   final String place;
   final double distanceKm;
+  final DateTime? quakeTime;
 
   factory QuakeAlert.fromRow(Map<String, dynamic> row) {
+    final rawTime = row['quake_time'];
     return QuakeAlert(
       id: (row['id'] as num).toInt(),
       magnitude: (row['magnitude'] as num).toDouble(),
       place: '${row['place']}',
       distanceKm: (row['distance_km'] as num).toDouble(),
+      quakeTime: rawTime is String ? DateTime.tryParse(rawTime) : null,
     );
   }
 
@@ -28,6 +34,17 @@ class QuakeAlert {
     }
     return 'a ${distanceKm.toStringAsFixed(1)} km';
   }
+}
+
+String describeQuakeAlert(QuakeAlert alert, {DateTime? now}) {
+  final level = dangerLevelFor(alert.magnitude).label.toLowerCase();
+  final distance = alert.distanceLabel;
+  final when = alert.quakeTime == null
+      ? ''
+      : ' Ocurrió ${formatRelativeTime(alert.quakeTime!.millisecondsSinceEpoch, now: now)}.';
+  return 'Se registró un sismo $level de ${formatMagnitude(alert.magnitude)} '
+      '$distance de tu última ubicación, en ${alert.place}.$when '
+      'Al aceptar verás qué hacer antes, durante y después de un sismo.';
 }
 
 class QuakeAlertFeed {

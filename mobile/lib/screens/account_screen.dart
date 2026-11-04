@@ -3,9 +3,11 @@ import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/location_sync.dart';
+import '../services/password_change.dart';
 import '../services/push_notifications.dart';
 import '../theme/app_theme.dart';
 import '../utils/earthquake_format.dart';
+import '../widgets/change_password_form.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -89,6 +91,18 @@ class _AccountScreenState extends State<AccountScreen> {
             'La última ubicación se guarda solo con internet y el servicio de ubicación encendido. Sirve para avisarte si hay un sismo cerca.',
             style: TextStyle(color: kMuted),
           ),
+          if (user?.email != null) ...[
+            const SizedBox(height: 22),
+            ChangePasswordForm(
+              onSubmit: (currentPassword, newPassword) {
+                return updateAccountPassword(
+                  email: user!.email!,
+                  currentPassword: currentPassword,
+                  newPassword: newPassword,
+                );
+              },
+            ),
+          ],
           const SizedBox(height: 22),
           const Text(
             'NOTIFICACIONES',

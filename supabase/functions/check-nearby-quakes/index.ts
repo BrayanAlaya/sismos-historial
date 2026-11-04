@@ -1,45 +1,17 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import {
+  filterKnownAlerts,
+  alertPushBody,
+  matchAlerts,
+  selectAlertableQuakes,
+  simulationsForAlerts,
+  storedSimulationFromRow,
+} from "./quake_rules.ts";
 
 const usgsFeedUrl =
   "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson";
-const lookbackMs = 6 * 60 * 60 * 1000;
-const locationFreshMs = 7 * 24 * 60 * 60 * 1000;
 const checkIntervalMs = 6_000;
 const runBudgetMs = 54_000;
-
-type Quake = {
-  id: string;
-  magnitude: number;
-  place: string;
-  time: number;
-  latitude: number;
-  longitude: number;
-  radiusKm: number;
-};
-
-function radiusKm(magnitude: number) {
-  if (magnitude >= 6) return 300;
-  if (magnitude >= 5) return 150;
-  if (magnitude >= 4) return 80;
-  if (magnitude >= 2.5) return 40;
-  return 0;
-}
-
-function haversineKm(
-  latitudeA: number,
-  longitudeA: number,
-  latitudeB: number,
-  longitudeB: number,
-) {
-  const earthKm = 6371;
-  const toRad = (degrees: number) => (degrees * Math.PI) / 180;
-  const dLat = toRad(latitudeB - latitudeA);
-  const dLon = toRad(longitudeB - longitudeA);
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(latitudeA)) * Math.cos(toRad(latitudeB)) *
-      Math.sin(dLon / 2) ** 2;
-  return 2 * earthKm * Math.asin(Math.sqrt(a));
-}
 
 Deno.serve(async () => {
   const started = Date.now();
@@ -67,28 +39,12 @@ async function checkOnce() {
   }
 
   const feed = await usgs.json();
-  const cutoff = Date.now() - lookbackMs;
-  const quakes: Quake[] = [];
-  for (const feature of feed.features ?? []) {
-    const magnitude = feature?.properties?.mag;
-    const coordinates = feature?.geometry?.coordinates;
-    const time = feature?.properties?.time;
-    if (typeof magnitude !== "number" || typeof time !== "number") continue;
-    if (!Array.isArray(coordinates) || coordinates.length < 2) continue;
-    const radius = radiusKm(magnitude);
-    if (time < cutoff || radius === 0) continue;
-    quakes.push({
-      id: String(feature.id),
-      magnitude,
-      place: feature.properties.place ?? "Ubicación no disponible",
-      time,
-      longitude: Number(coordinates[0]),
-      latitude: Number(coordinates[1]),
-      radiusKm: radius,
-    });
-  }
+  const features = [...(feed.features ?? [])];
 
   const supabase = createClient(supabaseUrl, serviceKey);
+  const simulated = await readSimulations(supabase);
+  features.push(...simulationsForAlerts(simulated));
+  const quakes = selectAlertableQuakes(features);
   const { data: locations, error } = await supabase
     .from("user_locations")
     .select("user_id, latitude, longitude, updated_at")
@@ -97,31 +53,7 @@ async function checkOnce() {
     return { error: error.message };
   }
 
-  const freshAfter = Date.now() - locationFreshMs;
-  const alerts = [];
-  for (const location of locations ?? []) {
-    const updated = Date.parse(location.updated_at);
-    if (Number.isFinite(updated) && updated < freshAfter) continue;
-    for (const quake of quakes) {
-      const distance = haversineKm(
-        location.latitude,
-        location.longitude,
-        quake.latitude,
-        quake.longitude,
-      );
-      if (distance > quake.radiusKm) continue;
-      alerts.push({
-        user_id: location.user_id,
-        quake_id: quake.id,
-        magnitude: quake.magnitude,
-        place: quake.place,
-        latitude: quake.latitude,
-        longitude: quake.longitude,
-        distance_km: Math.round(distance * 10) / 10,
-        quake_time: new Date(quake.time).toISOString(),
-      });
-    }
-  }
+  const alerts = matchAlerts(locations ?? [], quakes);
 
   const fresh = await newAlerts(supabase, alerts);
   if (fresh.length > 0) {
@@ -135,8 +67,20 @@ async function checkOnce() {
   return {
     quakes: quakes.length,
     matches: fresh.length,
+    simulations: simulated.length,
     push,
   };
+}
+
+async function readSimulations(supabase: ReturnType<typeof createClient>) {
+  const { data, error } = await supabase
+    .from("simulated_quakes")
+    .select("id, magnitude, place, occurred_at, latitude, longitude, depth_km");
+  if (error || !data) return [];
+  return data.flatMap((row) => {
+    const parsed = storedSimulationFromRow(row);
+    return parsed ? [parsed] : [];
+  });
 }
 
 async function newAlerts<T extends { user_id: string; quake_id: string }>(
@@ -150,8 +94,7 @@ async function newAlerts<T extends { user_id: string; quake_id: string }>(
     .select("user_id, quake_id")
     .in("user_id", userIds);
   if (error) return alerts;
-  const known = new Set((data ?? []).map((row) => `${row.user_id}:${row.quake_id}`));
-  return alerts.filter((alert) => !known.has(`${alert.user_id}:${alert.quake_id}`));
+  return filterKnownAlerts(alerts, data ?? []);
 }
 
 async function sendQuakePush(
@@ -179,7 +122,9 @@ async function sendQuakePush(
     .from("device_tokens")
     .select("token, user_id")
     .in("user_id", userIds);
-  if (error || !tokens) return { sent: 0, configured: true };
+  if (error || !tokens) {
+    return { sent: 0, configured: true, tokens: 0, error: error?.message ?? "sin tokens" };
+  }
 
   const byUser = new Map<string, string[]>();
   for (const row of tokens) {
@@ -189,23 +134,23 @@ async function sendQuakePush(
   }
 
   let sent = 0;
+  let failed = 0;
   for (const alert of alerts) {
-    const distance = alert.distance_km < 1
-      ? `a ${Math.round(alert.distance_km * 1000)} m`
-      : `a ${alert.distance_km.toFixed(1)} km`;
     for (const token of byUser.get(alert.user_id) ?? []) {
       const delivered = await sendFcm(account.project_id, accessToken, {
         token,
         title: "Sismo cerca de ti",
-        body: `M ${alert.magnitude.toFixed(1)} ${distance}. ${alert.place}`,
+        body: alertPushBody(alert.magnitude, alert.distance_km, alert.place),
       });
       if (delivered === "sent") sent += 1;
+      if (delivered === "failed") failed += 1;
       if (delivered === "invalid") {
+        failed += 1;
         await supabase.from("device_tokens").delete().eq("token", token);
       }
     }
   }
-  return { sent, configured: true };
+  return { sent, failed, configured: true, tokens: tokens.length };
 }
 
 async function sendFcm(
@@ -225,6 +170,7 @@ async function sendFcm(
         message: {
           token: message.token,
           notification: { title: message.title, body: message.body },
+          data: { open: "safety_tips" },
           android: {
             priority: "HIGH",
             notification: { channel_id: "quake_alerts" },

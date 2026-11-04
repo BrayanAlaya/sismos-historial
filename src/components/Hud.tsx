@@ -9,6 +9,10 @@ type Props = {
   secondsLeft: number
   minMagnitude: number
   onMinMagnitudeChange: (value: number) => void
+  peruOnly: boolean
+  onPeruOnlyChange: (value: boolean) => void
+  soundEnabled: boolean
+  onSoundEnabledChange: (value: boolean) => void
   onOpenHistory: () => void
 }
 
@@ -21,6 +25,10 @@ export function Hud({
   secondsLeft,
   minMagnitude,
   onMinMagnitudeChange,
+  peruOnly,
+  onPeruOnlyChange,
+  soundEnabled,
+  onSoundEnabledChange,
   onOpenHistory,
 }: Props) {
   const updatedText = lastUpdated
@@ -35,6 +43,9 @@ export function Hud({
           <h1>Sismos en el mundo</h1>
         </div>
         <div className="hud-actions">
+          <a className="hud-button" href="/prueba">
+            Prueba
+          </a>
           <button type="button" className="hud-button" onClick={onOpenHistory}>
             Historial
           </button>
@@ -68,6 +79,24 @@ export function Hud({
             }
           />
         </label>
+        <div className="hud-checks">
+          <label className="hud-check">
+            <input
+              type="checkbox"
+              checked={peruOnly}
+              onChange={(event) => onPeruOnlyChange(event.target.checked)}
+            />
+            Solo Perú
+          </label>
+          <label className="hud-check">
+            <input
+              type="checkbox"
+              checked={soundEnabled}
+              onChange={(event) => onSoundEnabledChange(event.target.checked)}
+            />
+            Sonido desde M 4.0
+          </label>
+        </div>
         <p className="hud-updated">Última actualización: {updatedText}</p>
         {error ? <p className="hud-error">{error}</p> : null}
       </aside>

@@ -6,6 +6,8 @@ import {
   formatMagnitude,
   formatRelativeTime,
   getDangerLevel,
+  isInPeru,
+  priorityRecommendations,
 } from '../utils/earthquake'
 
 type Props = {
@@ -87,6 +89,15 @@ export function EarthquakeModal({ earthquake, onClose }: Props) {
           <p className="tsunami-alert">Alerta de tsunami asociada a este evento</p>
         ) : null}
 
+        <section className="advice">
+          <p className="modal-kicker">Qué hacer · nivel {danger.label}</p>
+          <ul>
+            {priorityRecommendations(earthquake.magnitude).map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ul>
+        </section>
+
         <dl className="modal-grid">
           <InfoRow label="Hace" value={formatRelativeTime(earthquake.time)} />
           <InfoRow label="Fecha y hora" value={formatDateTime(earthquake.time)} />
@@ -97,6 +108,14 @@ export function EarthquakeModal({ earthquake, onClose }: Props) {
           <InfoRow
             label="Coordenadas"
             value={formatCoordinates(earthquake.latitude, earthquake.longitude)}
+          />
+          <InfoRow
+            label="Territorio"
+            value={
+              isInPeru(earthquake.latitude, earthquake.longitude)
+                ? 'Dentro del recuadro de Perú'
+                : 'Fuera del recuadro de Perú'
+            }
           />
           <InfoRow label="Tipo" value={earthquake.type} />
           <InfoRow label="Estado" value={earthquake.status} />

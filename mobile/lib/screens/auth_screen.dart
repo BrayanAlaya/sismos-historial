@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config/supabase_settings.dart';
+import '../services/password_change.dart';
 import '../theme/app_theme.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -17,7 +18,9 @@ class _AuthScreenState extends State<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmController = TextEditingController();
   var _registering = false;
+  var _recovering = false;
   var _submitting = false;
   var _obscurePassword = true;
   String? _error;
@@ -27,6 +30,7 @@ class _AuthScreenState extends State<AuthScreen> {
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmController.dispose();
     super.dispose();
   }
 
@@ -44,18 +48,24 @@ class _AuthScreenState extends State<AuthScreen> {
 
     try {
       final auth = Supabase.instance.client.auth;
-      if (_registering) {
+      if (_recovering) {
+        await replacePasswordByEmail(email: email, password: password);
+        await auth.signInWithPassword(email: email, password: password);
+      } else if (_registering) {
         final response = await auth.signUp(email: email, password: password);
         if (!mounted) return;
         if (response.session == null) {
           setState(() {
             _registering = false;
-            _info = 'Cuenta creada. Revisa tu correo para confirmarla y luego entra.';
+            _info = 'Cuenta creada. Entra con ese correo y contraseña.';
           });
         }
       } else {
         await auth.signInWithPassword(email: email, password: password);
       }
+    } on PasswordChangeException catch (error) {
+      if (!mounted) return;
+      setState(() => _error = error.message);
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = messageForAuthError(error));
@@ -121,14 +131,20 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _registering ? 'Crear cuenta' : 'Entra a Sismos',
+                      _recovering
+                          ? 'Recuperar contraseña'
+                          : _registering
+                          ? 'Crear cuenta'
+                          : 'Entra a Sismos',
                       style: Theme.of(context).textTheme.headlineMedium
                           ?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'El mapa en vivo queda detrás de tu cuenta.',
-                      style: TextStyle(color: kMuted),
+                    Text(
+                      _recovering
+                          ? 'Escribe el correo de la cuenta y la nueva contraseña.'
+                          : 'El mapa en vivo queda detrás de tu cuenta.',
+                      style: const TextStyle(color: kMuted),
                     ),
                     const SizedBox(height: 28),
                     TextFormField(
@@ -155,11 +171,13 @@ class _AuthScreenState extends State<AuthScreen> {
                             ? AutofillHints.newPassword
                             : AutofillHints.password,
                       ],
-                      textInputAction: TextInputAction.done,
+                      textInputAction: _recovering
+                          ? TextInputAction.next
+                          : TextInputAction.done,
                       enabled: !_submitting,
-                      onFieldSubmitted: (_) => _submit(),
+                      onFieldSubmitted: _recovering ? null : (_) => _submit(),
                       decoration: InputDecoration(
-                        labelText: 'Contraseña',
+                        labelText: _recovering ? 'Nueva contraseña' : 'Contraseña',
                         suffixIcon: IconButton(
                           onPressed: () {
                             setState(
@@ -174,12 +192,33 @@ class _AuthScreenState extends State<AuthScreen> {
                         ),
                       ),
                       validator: (value) {
+                        if (_recovering) {
+                          return newPasswordIssue(value ?? '', '');
+                        }
                         if ((value ?? '').length < 6) {
                           return 'Usa al menos 6 caracteres.';
                         }
                         return null;
                       },
                     ),
+                    if (_recovering) ...[
+                      const SizedBox(height: 14),
+                      TextFormField(
+                        key: const Key('recover-confirm'),
+                        controller: _confirmController,
+                        obscureText: _obscurePassword,
+                        enabled: !_submitting,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _submit(),
+                        decoration: const InputDecoration(
+                          labelText: 'Confirmar nueva contraseña',
+                        ),
+                        validator: (value) => confirmPasswordIssue(
+                          value ?? '',
+                          _passwordController.text,
+                        ),
+                      ),
+                    ],
                     if (_error != null) ...[
                       const SizedBox(height: 14),
                       Text(
@@ -200,21 +239,46 @@ class _AuthScreenState extends State<AuthScreen> {
                               height: 22,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(_registering ? 'Crear cuenta' : 'Entrar'),
+                          : Text(
+                              _recovering
+                                  ? 'Cambiar contraseña'
+                                  : _registering
+                                  ? 'Crear cuenta'
+                                  : 'Entrar',
+                            ),
                     ),
                     const SizedBox(height: 8),
+                    if (!_recovering && !_registering)
+                      TextButton(
+                        onPressed: _submitting
+                            ? null
+                            : () {
+                                setState(() {
+                                  _recovering = true;
+                                  _error = null;
+                                  _info = null;
+                                });
+                              },
+                        child: const Text('Olvidé mi contraseña'),
+                      ),
                     TextButton(
                       onPressed: _submitting
                           ? null
                           : () {
                               setState(() {
-                                _registering = !_registering;
+                                if (_recovering) {
+                                  _recovering = false;
+                                } else {
+                                  _registering = !_registering;
+                                }
                                 _error = null;
                                 _info = null;
                               });
                             },
                       child: Text(
-                        _registering
+                        _recovering
+                            ? 'Volver a entrar'
+                            : _registering
                             ? '¿Ya tienes cuenta? Entra'
                             : '¿No tienes cuenta? Regístrate',
                       ),
@@ -256,8 +320,12 @@ String messageForAuthError(Object error) {
     case 'over_request_rate_limit':
     case 'over_email_send_rate_limit':
       return 'Supabase ya no envía más correos por ahora. Espera cerca de una hora, o desactiva la confirmación por correo en el proyecto.';
-    case 'email_address_invalid':
     case 'validation_failed':
+      if (error.message.toLowerCase().contains('redirect')) {
+        return 'El enlace de recuperación no está permitido en el proyecto.';
+      }
+      return 'Supabase no acepta ese correo. Usa una dirección real, como la de Hotmail.';
+    case 'email_address_invalid':
       return 'Supabase no acepta ese correo. Usa una dirección real, como la de Hotmail.';
   }
 

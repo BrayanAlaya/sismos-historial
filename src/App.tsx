@@ -1,10 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchEarthquakes } from './api/earthquakes'
 import { EarthquakeMap } from './components/EarthquakeMap'
 import { EarthquakeModal } from './components/EarthquakeModal'
 import { HistoryModal } from './components/HistoryModal'
 import { Hud } from './components/Hud'
 import type { Earthquake } from './types'
+import { playAlertTone } from './utils/alertSound'
+import { filterByMinMagnitude, filterByPeru, newSoundQuakeIds } from './utils/earthquake'
+import {
+  readPeruOnly,
+  readSoundEnabled,
+  writePeruOnly,
+  writeSoundEnabled,
+} from './utils/mapPreferences'
 
 const REFRESH_MS = 40_000
 
@@ -17,12 +25,24 @@ export default function App() {
   const [secondsLeft, setSecondsLeft] = useState(REFRESH_MS / 1000)
   const [minMagnitude, setMinMagnitude] = useState(2.5)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [peruOnly, setPeruOnly] = useState(readPeruOnly)
+  const [soundEnabled, setSoundEnabled] = useState(readSoundEnabled)
+  const knownQuakeIds = useRef(new Set<string>())
+  const feedReady = useRef(false)
+  const soundEnabledRef = useRef(soundEnabled)
+  soundEnabledRef.current = soundEnabled
 
   const loadEarthquakes = useCallback(async (isRefresh = false) => {
     if (!isRefresh) setLoading(true)
 
     try {
       const data = await fetchEarthquakes()
+      const fresh = newSoundQuakeIds(knownQuakeIds.current, data)
+      if (feedReady.current && soundEnabledRef.current && fresh.length > 0) {
+        playAlertTone()
+      }
+      for (const item of data) knownQuakeIds.current.add(item.id)
+      feedReady.current = true
       setEarthquakes(data)
       setError(null)
       setLastUpdated(new Date())
@@ -61,8 +81,9 @@ export default function App() {
   }, [earthquakes, selected])
 
   const visibleEarthquakes = useMemo(() => {
-    return earthquakes.filter((item) => item.magnitude >= minMagnitude)
-  }, [earthquakes, minMagnitude])
+    const byMagnitude = filterByMinMagnitude(earthquakes, minMagnitude)
+    return peruOnly ? filterByPeru(byMagnitude) : byMagnitude
+  }, [earthquakes, minMagnitude, peruOnly])
 
   return (
     <div className="app">
@@ -79,6 +100,16 @@ export default function App() {
         secondsLeft={secondsLeft}
         minMagnitude={minMagnitude}
         onMinMagnitudeChange={setMinMagnitude}
+        peruOnly={peruOnly}
+        onPeruOnlyChange={(value) => {
+          setPeruOnly(value)
+          writePeruOnly(value)
+        }}
+        soundEnabled={soundEnabled}
+        onSoundEnabledChange={(value) => {
+          setSoundEnabled(value)
+          writeSoundEnabled(value)
+        }}
         onOpenHistory={() => setHistoryOpen(true)}
       />
       {historyOpen ? (

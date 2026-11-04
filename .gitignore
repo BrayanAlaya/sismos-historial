@@ -12,6 +12,8 @@ dist
 dist-ssr
 *.local
 **/*firebase-adminsdk*.json
+supabase/.fcm.env
+docs
 
 # Editor directories and files
 .vscode/*

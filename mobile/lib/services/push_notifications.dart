@@ -1,9 +1,25 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+final quakePushOpens = StreamController<void>.broadcast();
+var pendingSafetyTips = false;
+var _pushOpensAttached = false;
+
+void signalSafetyTips() {
+  pendingSafetyTips = true;
+  if (!quakePushOpens.isClosed) quakePushOpens.add(null);
+}
+
+bool takePendingSafetyTips() {
+  final pending = pendingSafetyTips;
+  pendingSafetyTips = false;
+  return pending;
+}
 
 enum QuakePushStatus { enabled, disabled, unavailable }
 
@@ -34,6 +50,7 @@ Future<void> startQuakePush() async {
 
   try {
     await Firebase.initializeApp();
+    await _attachPushOpenListener();
     final messaging = FirebaseMessaging.instance;
     await messaging.requestPermission();
     final token = await messaging.getToken();
@@ -57,6 +74,16 @@ Future<void> stopQuakePush() async {
     }
     await messaging.deleteToken();
   } catch (_) {}
+}
+
+Future<void> _attachPushOpenListener() async {
+  if (_pushOpensAttached) return;
+  _pushOpensAttached = true;
+  FirebaseMessaging.onMessageOpenedApp.listen((_) {
+    signalSafetyTips();
+  });
+  final initial = await FirebaseMessaging.instance.getInitialMessage();
+  if (initial != null) signalSafetyTips();
 }
 
 Future<void> _saveToken(String token) async {

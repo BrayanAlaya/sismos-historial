@@ -173,6 +173,12 @@ a {
   white-space: nowrap;
 }
 
+a.hud-button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
 .hud-button:hover {
   background: #0284c7;
 }
@@ -216,6 +222,40 @@ a {
 .filter input {
   width: 100%;
   accent-color: #38bdf8;
+}
+
+.hud-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.hud-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.hud-check input {
+  accent-color: #38bdf8;
+}
+
+.advice {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.advice ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.advice li + li {
+  margin-top: 6px;
 }
 
 .hud-error {
@@ -559,5 +599,215 @@ a {
 
   .modal-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+html:has(.admin-page),
+body:has(.admin-page),
+#root:has(.admin-page) {
+  height: auto;
+  min-height: 100%;
+  overflow: auto;
+  background: #0b1220;
+}
+
+.admin-page {
+  min-height: 100%;
+  padding: 28px 20px 48px;
+  background:
+    radial-gradient(circle at top left, rgba(14, 165, 233, 0.16), transparent 32%),
+    #0b1220;
+  color: #e8eef7;
+}
+
+.admin-page h1,
+.admin-page h2 {
+  margin: 0;
+  letter-spacing: -0.03em;
+}
+
+.admin-page h2 {
+  font-size: 1.15rem;
+}
+
+.admin-top,
+.admin-top-actions,
+.admin-fields,
+.admin-list li {
+  display: flex;
+  gap: 12px;
+}
+
+.admin-top,
+.admin-list li {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-top {
+  max-width: 1080px;
+  margin: 0 auto 20px;
+}
+
+.admin-login {
+  width: min(440px, 100%);
+  margin: 8vh auto 0;
+}
+
+.admin-card {
+  background: rgba(10, 16, 28, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+}
+
+.admin-layout {
+  max-width: 1080px;
+  margin: 0 auto 16px;
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) 1fr;
+  gap: 16px;
+}
+
+.admin-page > .admin-card {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.admin-lead {
+  margin: 8px 0 0;
+  color: #94a3b8;
+  font-size: 0.92rem;
+}
+
+.admin-page label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 0.86rem;
+  color: #cbd5e1;
+}
+
+.admin-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.admin-fields label {
+  margin-top: 0;
+}
+
+.admin-page input {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 10px;
+  background: #1e293b;
+  color: #e2e8f0;
+  font: inherit;
+  padding: 10px 12px;
+}
+
+.admin-page input:focus {
+  outline: 2px solid rgba(125, 211, 252, 0.7);
+  outline-offset: 1px;
+}
+
+.admin-error,
+.admin-notice {
+  margin: 12px 0 0;
+  font-size: 0.9rem;
+}
+
+.admin-error {
+  color: #fda4af;
+}
+
+.admin-notice {
+  color: #86efac;
+}
+
+.admin-card .hud-button {
+  margin-top: 16px;
+}
+
+.admin-back,
+.admin-ghost {
+  color: #7dd3fc;
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.admin-back {
+  display: inline-block;
+  margin-top: 14px;
+}
+
+.admin-ghost,
+.admin-danger {
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-ghost {
+  padding: 10px 4px;
+}
+
+.admin-danger {
+  padding: 8px 12px;
+  background: #9f1239;
+  color: #fff;
+}
+
+.admin-map-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-map {
+  height: 360px;
+  margin-top: 12px;
+  border-radius: 14px;
+  cursor: crosshair;
+}
+
+.admin-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+}
+
+.admin-list li {
+  align-items: flex-start;
+  padding: 12px 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.admin-list p {
+  margin: 4px 0 0;
+  color: #94a3b8;
+  font-size: 0.88rem;
+}
+
+.admin-badge {
+  display: inline-block;
+  margin-top: 6px;
+  color: #7dd3fc;
+}
+
+@media (max-width: 800px) {
+  .admin-layout,
+  .admin-fields,
+  .admin-top {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .admin-top-actions {
+    display: flex;
   }
 }

@@ -40,8 +40,79 @@ export function formatShortDateTime(timestamp: number): string {
   })
 }
 
-export function formatRelativeTime(timestamp: number): string {
-  const diffMs = Date.now() - timestamp
+export function filterByMinMagnitude<T extends { magnitude: number }>(
+  earthquakes: T[],
+  minMagnitude: number,
+): T[] {
+  return earthquakes.filter((item) => item.magnitude >= minMagnitude)
+}
+
+/** Recuadro geográfico de referencia de Perú, de Tumbes a Tacna y de la costa al oriente. */
+export const PERU_BOUNDS = {
+  minLatitude: -18.35,
+  maxLatitude: -0.04,
+  minLongitude: -81.33,
+  maxLongitude: -68.65,
+}
+
+export function isInPeru(latitude: number, longitude: number): boolean {
+  return (
+    latitude >= PERU_BOUNDS.minLatitude &&
+    latitude <= PERU_BOUNDS.maxLatitude &&
+    longitude >= PERU_BOUNDS.minLongitude &&
+    longitude <= PERU_BOUNDS.maxLongitude
+  )
+}
+
+export function filterByPeru<T extends { latitude: number; longitude: number }>(
+  earthquakes: T[],
+): T[] {
+  return earthquakes.filter((item) => isInPeru(item.latitude, item.longitude))
+}
+
+/** A partir de Moderado el mapa emite un tono, si el usuario no lo silenció. */
+export const SOUND_MIN_MAGNITUDE = 4
+
+export function shouldSoundForMagnitude(magnitude: number): boolean {
+  return magnitude >= SOUND_MIN_MAGNITUDE
+}
+
+export function newSoundQuakeIds(
+  previousIds: ReadonlySet<string>,
+  earthquakes: Array<{ id: string; magnitude: number }>,
+): string[] {
+  return earthquakes
+    .filter(
+      (item) =>
+        shouldSoundForMagnitude(item.magnitude) && !previousIds.has(item.id),
+    )
+    .map((item) => item.id)
+}
+
+export function priorityRecommendations(magnitude: number): string[] {
+  if (magnitude >= 6) {
+    return [
+      'Agáchate, cúbrete y sujétate, lejos de ventanas y de lo que pueda caer.',
+      'Cuando el movimiento pare, si el edificio está dañado evacúa por las escaleras.',
+      'En la costa, si hay aviso de tsunami, aléjate del mar hacia una zona alta.',
+    ]
+  }
+  if (magnitude >= 4) {
+    return [
+      'Agáchate, cúbrete y sujétate bajo un mueble firme.',
+      'Aléjate de ventanas, espejos y estanterías.',
+      'No uses escaleras ni el ascensor mientras se mueve el suelo.',
+    ]
+  }
+  return [
+    'Mantén la calma y comprueba si el movimiento se hace más fuerte.',
+    'Aléjate de objetos que puedan caer.',
+    'Ten presentes los pasos de antes, durante y después.',
+  ]
+}
+
+export function formatRelativeTime(timestamp: number, now = Date.now()): string {
+  const diffMs = now - timestamp
   const minutes = Math.floor(diffMs / 60_000)
   if (minutes < 1) return 'hace unos segundos'
   if (minutes < 60) return `hace ${minutes} min`
@@ -57,8 +128,12 @@ export function formatCoordinates(latitude: number, longitude: number): string {
   return `${Math.abs(latitude).toFixed(3)}° ${latDir}, ${Math.abs(longitude).toFixed(3)}° ${lonDir}`
 }
 
-export function isRecent(earthquake: Earthquake, minutes = 30): boolean {
-  return Date.now() - earthquake.time < minutes * 60_000
+export function isRecent(
+  earthquake: Earthquake,
+  minutes = 30,
+  now = Date.now(),
+): boolean {
+  return now - earthquake.time < minutes * 60_000
 }
 
 export const DANGER_LEGEND: DangerLevel[] = [

@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -55,15 +57,24 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   Timer? _locationTimer;
   var _requestId = 0;
   var _presentingAlert = false;
+  var _showingSafety = false;
+  var _peruOnly = false;
+  var _soundEnabled = true;
+  var _feedReady = false;
   final _alertQueue = <QuakeAlert>[];
   final _knownAlertIds = <int>{};
+  final _knownQuakeIds = <String>{};
+  StreamSubscription<void>? _pushOpens;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _load(isRefresh: false);
+    unawaited(_start());
     _listenForAlerts();
+    _pushOpens = quakePushOpens.stream.listen((_) {
+      unawaited(_showSafetyTips());
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_openSession());
     });
@@ -81,6 +92,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _pushOpens?.cancel();
     _refreshTimer?.cancel();
     _locationTimer?.cancel();
     _requestId++;
@@ -93,6 +105,36 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     await _syncLocation(requestPermission: true);
     if (!mounted) return;
     await startQuakePush();
+    if (takePendingSafetyTips()) await _showSafetyTips();
+  }
+
+  Future<void> _start() async {
+    final preferences = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _peruOnly = preferences.getBool('sismos.peruOnly') ?? false;
+      _soundEnabled = preferences.getBool('sismos.soundEnabled') ?? true;
+    });
+    await _load(isRefresh: false);
+  }
+
+  Future<void> _savePreference(String key, bool value) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(key, value);
+  }
+
+  Future<void> _showSafetyTips({double? magnitude}) async {
+    if (!mounted || _showingSafety) {
+      takePendingSafetyTips();
+      return;
+    }
+    _showingSafety = true;
+    takePendingSafetyTips();
+    try {
+      await showSafetyTips(context, magnitude: magnitude);
+    } finally {
+      _showingSafety = false;
+    }
   }
 
   Future<void> _syncLocation({bool requestPermission = false}) async {
@@ -107,7 +149,13 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     try {
       final unseen = await _alertFeed.loadUnseen();
       if (!mounted) return;
-      _enqueueAlerts(unseen);
+      if (unseen.isNotEmpty) {
+        final pending = [...unseen]..sort((a, b) => b.id.compareTo(a.id));
+        _enqueueAlerts([pending.first]);
+        for (final older in pending.skip(1)) {
+          unawaited(_alertFeed.markSeen(older.id));
+        }
+      }
     } catch (_) {}
     _alertFeed.listen((alert) {
       if (!mounted) return;
@@ -129,21 +177,21 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     final alert = _alertQueue.removeAt(0);
     await showDialog<void>(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
         return AlertDialog(
           title: const Text('Sismo cerca de ti'),
-          content: Text(
-            '${formatMagnitude(alert.magnitude)} ${alert.distanceLabel}\n${alert.place}',
-          ),
+          content: Text(describeQuakeAlert(alert)),
           actions: [
             FilledButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Entendido'),
+              child: const Text('Aceptar'),
             ),
           ],
         );
       },
     );
+    if (mounted) await _showSafetyTips(magnitude: alert.magnitude);
     try {
       await _alertFeed.markSeen(alert.id);
     } catch (_) {}
@@ -173,6 +221,20 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     try {
       final data = await fetchEarthquakes();
       if (!mounted || requestId != _requestId) return;
+      final shouldSound = _feedReady &&
+          _soundEnabled &&
+          data.any(
+            (earthquake) =>
+                !_knownQuakeIds.contains(earthquake.id) &&
+                shouldSoundForMagnitude(earthquake.magnitude),
+          );
+      for (final earthquake in data) {
+        _knownQuakeIds.add(earthquake.id);
+      }
+      _feedReady = true;
+      if (shouldSound) {
+        unawaited(SystemSound.play(SystemSoundType.alert));
+      }
       setState(() {
         _earthquakes = data;
         _error = null;
@@ -211,7 +273,10 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     final visible = [
       for (final earthquake in _earthquakes)
-        if (earthquake.magnitude >= _minMagnitude) earthquake,
+        if (earthquake.magnitude >= _minMagnitude &&
+            (!_peruOnly ||
+                isInPeru(earthquake.latitude, earthquake.longitude)))
+          earthquake,
     ];
     final email = Supabase.instance.client.auth.currentUser?.email;
     final userPoint = _userPlace == null
@@ -270,7 +335,17 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                   minMagnitude: _minMagnitude,
                   lastUpdated: _lastUpdated,
                   error: _error,
+                  peruOnly: _peruOnly,
+                  soundEnabled: _soundEnabled,
                   onChanged: (value) => setState(() => _minMagnitude = value),
+                  onPeruOnly: (value) {
+                    setState(() => _peruOnly = value);
+                    unawaited(_savePreference('sismos.peruOnly', value));
+                  },
+                  onSound: (value) {
+                    setState(() => _soundEnabled = value);
+                    unawaited(_savePreference('sismos.soundEnabled', value));
+                  },
                 ),
               ),
             ),
@@ -453,13 +528,21 @@ class _FilterPanel extends StatelessWidget {
     required this.minMagnitude,
     required this.lastUpdated,
     required this.error,
+    required this.peruOnly,
+    required this.soundEnabled,
     required this.onChanged,
+    required this.onPeruOnly,
+    required this.onSound,
   });
 
   final double minMagnitude;
   final DateTime? lastUpdated;
   final String? error;
+  final bool peruOnly;
+  final bool soundEnabled;
   final ValueChanged<double> onChanged;
+  final ValueChanged<bool> onPeruOnly;
+  final ValueChanged<bool> onSound;
 
   @override
   Widget build(BuildContext context) {
@@ -474,6 +557,20 @@ class _FilterPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Magnitud mínima: ${minMagnitude.toStringAsFixed(1)}'),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: const Text('Solo Perú'),
+              value: peruOnly,
+              onChanged: onPeruOnly,
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: const Text('Sonido desde M 4.0'),
+              value: soundEnabled,
+              onChanged: onSound,
+            ),
             Slider(
               min: 0,
               max: 7,

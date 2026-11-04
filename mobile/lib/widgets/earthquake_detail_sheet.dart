@@ -104,6 +104,22 @@ class EarthquakeDetailSheet extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 16),
+            Text(
+              'Qué hacer · nivel ${danger.label}',
+              style: const TextStyle(
+                color: kKicker,
+                fontSize: 13,
+                letterSpacing: 1.1,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (final step in priorityRecommendations(earthquake.magnitude))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(step),
+              ),
+            const SizedBox(height: 8),
             _DetailRow(label: 'Hace', value: formatRelativeTime(earthquake.time)),
             _DetailRow(label: 'Fecha y hora', value: formatDateTime(earthquake.time)),
             _DetailRow(
@@ -113,6 +129,12 @@ class EarthquakeDetailSheet extends StatelessWidget {
             _DetailRow(
               label: 'Coordenadas',
               value: formatCoordinates(earthquake.latitude, earthquake.longitude),
+            ),
+            _DetailRow(
+              label: 'Territorio',
+              value: isInPeru(earthquake.latitude, earthquake.longitude)
+                  ? 'Dentro del recuadro de Perú'
+                  : 'Fuera del recuadro de Perú',
             ),
             _DetailRow(label: 'Tipo', value: earthquake.type),
             _DetailRow(label: 'Estado', value: earthquake.status),
